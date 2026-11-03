@@ -3,8 +3,18 @@
 build/
 devel/
 files/
-README.md
+/README.md
 src/CMakeLists.txt
 benchmark_haha.zip
 rebound_planner_BB.zip
+
+# --- experiments ---
+logs/
+results/raw/
+*.npy
+*.status
+*.mp4
+__pycache__/
+*.pyc
+
 
