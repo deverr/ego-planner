@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>ego_planner_experiments</name>
+  <version>0.1.0</version>
+  <description>
+    Controlled experiments on EGO-Planner: how obstacle density and dynamic
+    limits affect success rate, flight time and clearance.
+  </description>
+  <maintainer email="deverr@users.noreply.github.com">deverr</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <exec_depend>ego_planner</exec_depend>
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+</package>
