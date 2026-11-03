@@ -1,3 +1,28 @@
+# EGO-Planner · obstacle-density study (fork)
+
+> **This fork adds a controlled experiment, not a new planner.**
+>
+> The upstream simulator hardcodes `seed = 127`, so every launch produces the
+> same map, and the `c_num` / `p_num` arguments only feed a `random_forest` node
+> that is commented out — they have no effect. I parameterised the `mockamap`
+> noise instead (`seed`, `fill`, `complexity`) and ran the stock planner over
+> several obstacle densities and velocity limits, measuring success rate,
+> flight time, path length, clearance and replan count.
+>
+> Pilot run (2 seeds per condition — full sweep script included):
+>
+> | fill | success | flight time (s) | min clearance (m) |
+> |---|---|---|---|
+> | 0.12 | 2/2 | 58.6 ± 0.1 | 0.15 / 0.16 |
+> | 0.20 | 2/2 | 59.2 ± 0.3 | 0.09 / 0.11 |
+>
+> Methodology, metrics and limitations: [`experiments/README.md`](experiments/README.md).
+> Reproduce: `./experiments/run_all.sh` (headless, ~2 h for the full sweep).
+>
+> The upstream README is unchanged below.
+
+---
+
 # Note!
 Our recently developed planner [EGO-Swarm](https://github.com/ZJU-FAST-Lab/ego-planner-swarm) is an evolution from EGO-Planner. 
 It is more robust and safe, and therefore, is more recommended to use.
