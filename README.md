@@ -1,23 +1,33 @@
-# EGO-Planner · obstacle-density study (fork)
+# EGO-Planner · obstacle-density & speed sweep (fork)
 
 > **This fork adds a controlled experiment, not a new planner.**
 >
 > The upstream simulator hardcodes `seed = 127`, so every launch produces the
-> same map, and the `c_num` / `p_num` arguments only feed a `random_forest` node
-> that is commented out — they have no effect. I parameterised the `mockamap`
-> noise instead (`seed`, `fill`, `complexity`) and ran the stock planner over
-> several obstacle densities and velocity limits, measuring success rate,
-> flight time, path length, clearance and replan count.
+> same map and repeated runs are not independent samples. The `c_num` / `p_num`
+> arguments only feed a `random_forest` node that is commented out inside a CDATA
+> block — they have no effect. I parameterised the `mockamap` noise instead and
+> swept obstacle density and velocity limits.
 >
-> Pilot run (2 seeds per condition — full sweep script included):
+> | fill (at 2 m/s) | success | flight time (s) | mean clearance (m) | replans |
+> |---|---|---|---|---|
+> | 0.12 | 10/12 | 59.9 ± 2.4 | 0.14 | 46 |
+> | 0.20 | 9/12 | 60.7 ± 2.3 | 0.12 | 63 |
+> | 0.28 | 9/10 | 62.1 ± 4.3 | 0.09 | 76 |
 >
-> | fill | success | flight time (s) | min clearance (m) |
-> |---|---|---|---|
-> | 0.12 | 2/2 | 58.6 ± 0.1 | 0.15 / 0.16 |
-> | 0.20 | 2/2 | 59.2 ± 0.3 | 0.09 / 0.11 |
+> | max_vel (at fill 0.12) | success | flight time (s) | mean clearance (m) | replans |
+> |---|---|---|---|---|
+> | 2.0 | 10/12 | 59.9 ± 2.4 | 0.14 | 46 |
+> | 3.0 | 7/8 | 41.3 ± 1.2 | 0.12 | 61 |
+> | 4.0 | 6/8 | 35.1 ± 3.6 | 0.08 | 92 |
 >
-> Methodology, metrics and limitations: [`experiments/README.md`](experiments/README.md).
-> Reproduce: `./experiments/run_all.sh` (headless, ~2 h for the full sweep).
+> **Takeaway:** success rate does not change measurably at this sample size, but
+> tighter conditions are paid for with replanning — at 4 m/s the replan rate
+> doubles and mean clearance roughly halves. The safety margin is being bought,
+> not held.
+>
+> Methodology, metrics, excluded trials and limitations:
+> [`experiments/README.md`](experiments/README.md).
+> Reproduce: `./experiments/run_all.sh` (headless).
 >
 > The upstream README is unchanged below.
 

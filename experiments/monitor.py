@@ -34,6 +34,9 @@ class Monitor(object):
         self.prev = None
         self.result = "timeout"
         self.cloud_saved = False
+        self.ready = False       # 无人机是否已经起飞到 ready_z
+        self.t_ready = None
+        self.z_max = 0.0
 
         self.fh = open(args.out, "w", buffering=1)
         self.fh.write("t,x,y,z,vx,vy,vz\n")
@@ -67,6 +70,12 @@ class Monitor(object):
                       % (t, p.x, p.y, p.z, v.x, v.y, v.z))
         self.n += 1
 
+        # 起飞检查：仿真没起来时无人机会停在原点，靠这个把无效试验挡掉
+        self.z_max = max(self.z_max, p.z)
+        if not self.ready and p.z > self.args.ready_z:
+            self.ready = True
+            self.t_ready = time.time()
+
         # 累计航程：起点与终点很近，必须先用航程排除「刚起飞就被判定到点」
         if self.prev is not None:
             self.cum += float(np.linalg.norm(
@@ -97,19 +106,34 @@ def main():
                     help="累计航程超过该值后才接受终点判定 (m)")
     ap.add_argument("--tol", type=float, default=0.5)
     ap.add_argument("--timeout", type=float, default=120.0)
+    ap.add_argument("--ready-z", type=float, default=0.5,
+                    help="无人机起飞到这个高度才算仿真正常")
+    ap.add_argument("--ready-timeout", type=float, default=30.0)
     args = ap.parse_args()
 
     rospy.init_node("trial_monitor", disable_signals=True)
     mon = Monitor(args)
 
-    t0 = time.time()
+    t_start = time.time()
     rate = rospy.Rate(10)
-    while not rospy.is_shutdown() and (time.time() - t0) < args.timeout:
+    while not rospy.is_shutdown():
+        now = time.time()
+        if not mon.ready:
+            if now - t_start > args.ready_timeout:
+                mon.result = "unhealthy"
+                break
+        elif now - mon.t_ready > args.timeout:
+            break
         rate.sleep()
 
     mon.close()
     with open(args.out.replace(".csv", ".status"), "w") as fh:
         fh.write("%s %d\n" % (mon.result, mon.n))
+
+    if mon.result == "unhealthy":
+        print("unhealthy samples=%d z_max=%.2f" % (mon.n, mon.z_max))
+        sys.exit(3)
+
     print("%s samples=%d" % (mon.result, mon.n))
     sys.exit(0 if mon.result == "success" else 2)
 

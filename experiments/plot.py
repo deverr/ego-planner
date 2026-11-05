@@ -64,9 +64,13 @@ def main():
         print("no rows")
         return
 
-    md = [table(rows, "fill", "障碍密度扫描（fill）")]
-    if any(fnum(r["max_vel"]) != 2.0 for r in rows):
-        md.append(table(rows, "max_vel", "速度上限扫描（max_vel）"))
+    # 密度对比只能取同一速度下的样本，否则速度组的行会混进来
+    base = [r for r in rows if fnum(r["max_vel"]) == 2.0]
+    speed = [r for r in rows if fnum(r["fill"]) == 0.12]
+
+    md = [table(base, "fill", "障碍密度扫描（fill，max_vel 固定 2.0）")]
+    if len({fnum(r["max_vel"]) for r in speed}) > 1:
+        md.append(table(speed, "max_vel", "速度上限扫描（max_vel，fill 固定 0.12）"))
     text = "\n".join(md)
     print(text)
 
@@ -82,21 +86,30 @@ def main():
     except Exception:
         return
 
-    png = args.png or os.path.join(os.path.dirname(args.summary), "fig_fill.png")
-    fills = sorted({fnum(r["fill"]) for r in rows})
-    data = [[fnum(r["flight_time"]) for r in rows
-             if fnum(r["fill"]) == f and fnum(r["flight_time"]) == fnum(r["flight_time"])]
-            for f in fills]
-    data = [d for d in data if d]
-    if data:
+    outdir = os.path.dirname(args.summary)
+    for subset, key, xlabel, title, fname in [
+        (base, "fill", "obstacle fill ratio",
+         "Flight time vs obstacle density", "fig_fill.png"),
+        (speed, "max_vel", "max velocity (m/s)",
+         "Flight time vs velocity limit", "fig_speed.png"),
+    ]:
+        groups = {}
+        for r in subset:
+            v = fnum(r["flight_time"])
+            if v == v:
+                groups.setdefault(fnum(r[key]), []).append(v)
+        if len(groups) < 2:
+            continue
+        keys = sorted(groups)
         fig, ax = plt.subplots(figsize=(6, 4))
-        ax.boxplot(data, labels=["%.2f" % f for f in fills[:len(data)]])
-        ax.set_xlabel("obstacle fill ratio")
+        ax.boxplot([groups[k] for k in keys], labels=["%.2f" % k for k in keys])
+        ax.set_xlabel(xlabel)
         ax.set_ylabel("flight time (s)")
-        ax.set_title("EGO-Planner flight time vs obstacle density")
+        ax.set_title(title)
         fig.tight_layout()
-        fig.savefig(png, dpi=140)
-        print("written:", png)
+        path = os.path.join(outdir, fname)
+        fig.savefig(path, dpi=140)
+        print("written:", path)
 
 
 if __name__ == "__main__":
