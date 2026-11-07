@@ -139,3 +139,59 @@ affected — worth knowing if this map generator is ever used for evaluation.
 - n = 8–12 per condition is enough to see the replan and clearance shifts, and
   not enough to resolve success-rate differences. Extending to 30 seeds per
   condition is the obvious next step.
+
+## Latency injection
+
+`exp.launch` exposes two independent knobs:
+
+- `cloud_delay_ms` — delays the perception point cloud (`delay_node.py --type cloud`)
+- `odom_delay_ms` — delays the odometry seen by both the planner and `so3_control`
+  (`--type odom`)
+
+Both relays hold messages and republish them with their **original `header.stamp`**,
+i.e. "the data arrives late but is correctly timestamped". `0` passes through
+(one extra hop, used as the control arm).
+
+### Perception latency does nothing — and that is the interesting part
+
+10 / 20 / 50 / 100 ms of cloud delay produced no measurable change: 12/12 success,
+flight time 58.8–60.4 s, median tracking error 0.039–0.047 m, clearance flat.
+
+The reason is structural: the planner accumulates the cloud into a **world-frame**
+map. The environment is static, so a delayed cloud only omits the newest sliver of
+the map; everything behind it is still correct. **Latency of a static map is not a
+loss of information.** A latency experiment that delays perception and measures
+nothing is therefore not evidence that latency is harmless — it means the
+information had already been integrated.
+
+Only state-estimate latency enters the control loop.
+
+### State-estimate latency
+
+| odom delay (ms) | n | success | median tracking error (m) | mean clearance (m) |
+|---|---|---|---|---|
+| 0 | 4 | 4/4 | 0.039 | 0.143 |
+| 10 | 3 | 3/3 | 0.054 | 0.158 |
+| 20 | 3 | 3/3 | 0.049 | 0.162 |
+| 50 | 3 | 3/3 | 0.090 | 0.160 |
+
+- 10–20 ms is inside the noise at 2 m/s.
+- At 50 ms the tracking error roughly doubles (0.039 → 0.090 m), and the
+  within-arm spread is only ±0.003 m, so the knee sits between 20 and 50 ms at
+  this operating point.
+- The 4 m/s operating point of the aerobatic work should reach the same knee at a
+  smaller delay, which is exactly the hypothesis worth testing on real hardware.
+- Counterintuitive: mean clearance *rises* with delay (0.143 → 0.160 m). A lagging
+  controller tracks slightly behind the reference, and in this map that happens to
+  help. Success rate is the wrong metric to notice this with.
+
+### Caveats
+
+- n = 3 per latency arm. This is a pilot; treat the 50 ms point as a hypothesis,
+  not a result.
+- The sim flies at a fixed 2 m/s waypoint loop. The regime where latency should
+  hurt most — high speed and high body rate — is not reachable without changing
+  the trajectory and controller.
+- `track_med` is the median of |commanded position − actual position| over the
+  flight. The instantaneous RMS is dominated by the reference jumps that occur at
+  replanning, so it is not used.

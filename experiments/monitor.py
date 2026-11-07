@@ -15,6 +15,7 @@ import time
 import numpy as np
 import rospy
 from nav_msgs.msg import Odometry
+from quadrotor_msgs.msg import PositionCommand
 from sensor_msgs.msg import PointCloud2
 from sensor_msgs import point_cloud2
 
@@ -41,8 +42,18 @@ class Monitor(object):
         self.fh = open(args.out, "w", buffering=1)
         self.fh.write("t,x,y,z,vx,vy,vz\n")
 
+        # 指令流单独落盘，用来算跟踪误差
+        self.fc = open(args.out.replace(".csv", "_cmd.csv"), "w", buffering=1)
+        self.fc.write("t,x,y,z\n")
+
         rospy.Subscriber("/visual_slam/odom", Odometry, self.cb_odom, queue_size=200)
+        rospy.Subscriber("/planning/pos_cmd", PositionCommand, self.cb_cmd, queue_size=200)
         rospy.Subscriber("/map_generator/global_cloud", PointCloud2, self.cb_cloud, queue_size=1)
+
+    def cb_cmd(self, msg):
+        p = msg.position
+        self.fc.write("%.4f,%.4f,%.4f,%.4f\n"
+                      % (msg.header.stamp.to_sec(), p.x, p.y, p.z))
 
     def cb_cloud(self, msg):
         """只存一次：地图在单次实验内是静态的。"""
@@ -91,10 +102,11 @@ class Monitor(object):
                 rospy.signal_shutdown("reached goal")
 
     def close(self):
-        try:
-            self.fh.close()
-        except Exception:  # noqa: BLE001
-            pass
+        for fh in (getattr(self, "fh", None), getattr(self, "fc", None)):
+            try:
+                fh.close()
+            except Exception:  # noqa: BLE001
+                pass
 
 
 def main():

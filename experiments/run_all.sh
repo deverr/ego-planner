@@ -46,15 +46,17 @@ QUICK=0
 [ "${1:-}" = "--quick" ] && QUICK=1
 
 if [ "$QUICK" = "1" ]; then
-    SEEDS=${SEEDS:-"1 2"}
-    FILLS=${FILLS:-"0.12"}
-    VELS=${VELS:-""}
-    BSEEDS=${BSEEDS:-"1 2"}
+    SEEDS=${SEEDS-"1 2"}
+    FILLS=${FILLS-"0.12"}
+    VELS=${VELS-""}
+    BSEEDS=${BSEEDS-"1 2"}
+    DELAYS=${DELAYS-""}
 else
-    SEEDS=${SEEDS:-"1 2 3 4 5 6 7 8 9 10 11 12"}
-    FILLS=${FILLS:-"0.12 0.20 0.28"}
-    VELS=${VELS:-"3.0 4.0"}
-    BSEEDS=${BSEEDS:-"1 2 3 4 5 6 7 8"}
+    SEEDS=${SEEDS-"1 2 3 4 5 6 7 8 9 10 11 12"}
+    FILLS=${FILLS-"0.12 0.20 0.28"}
+    VELS=${VELS-"3.0 4.0"}
+    BSEEDS=${BSEEDS-"1 2 3 4 5 6 7 8"}
+    DELAYS=${DELAYS-"10 20 50 100"}
 fi
 
 SIM_BIN="/ws/devel/lib/so3_quadrotor_simulator/quadrotor_simulator_so3"
@@ -83,15 +85,16 @@ sim_count() {
 }
 
 # 起一次仿真并跑到结束。成功返回 0/2，起不来返回 3
-attempt_once() {   # $1=fill $2=seed $3=max_vel $4=tag
-    local fill=$1 seed=$2 vel=$3 tag=$4
+attempt_once() {   # $1=fill $2=seed $3=max_vel $4=tag $5=cloud_delay $6=odom_delay
+    local fill=$1 seed=$2 vel=$3 tag=$4 delay=$5 odelay=${6:-0}
     local csv="$RAW/${tag}.csv" cloud="$RAW/${tag}.npy" status="$RAW/${tag}.status"
     local log="$LOGS/${tag}.log"
 
     kill_all
     roslaunch ego_planner_experiments exp.launch \
         seed:="$seed" fill:="$fill" max_vel:="$vel" \
-        > "$log" 2>&1 &
+        cloud_delay_ms:="$delay" odom_delay_ms:="$odelay" \
+        > "$log" 2>&1 9>&- &
     local lpid=$!
 
     for _ in $(seq 1 80); do
@@ -109,7 +112,7 @@ attempt_once() {   # $1=fill $2=seed $3=max_vel $4=tag
     timeout $((TIMEOUT + 45)) python3 "$HERE/monitor.py" \
         --out "$csv" --cloud "$cloud" \
         --goal="$GOAL" --min-path "$MIN_PATH" --tol "$TOL" \
-        --timeout "$TIMEOUT" --ready-z 0.5 --ready-timeout 30
+        --timeout "$TIMEOUT" --ready-z 0.5 --ready-timeout 30 9>&-
     local rc=$?
 
     kill -INT $lpid >/dev/null 2>&1
@@ -124,14 +127,17 @@ attempt_once() {   # $1=fill $2=seed $3=max_vel $4=tag
         --id "$tag" --odom "$csv" --cloud "$cloud" --log "$log" \
         --status "$status" --goal="$GOAL" --min-path "$MIN_PATH" --tol "$TOL" \
         --fill "$fill" --seed "$seed" --max-vel "$vel" --max-acc 3.0 \
+        --cloud-delay "$delay" --odom-delay "${odelay:-0}" \
         --summary "$SUMMARY" || true
 
     return $rc
 }
 
-run_one() {   # $1=fill $2=seed $3=max_vel
-    local fill=$1 seed=$2 vel=$3
+run_one() {   # $1=fill $2=seed $3=max_vel $4=cloud_delay $5=odom_delay
+    local fill=$1 seed=$2 vel=$3 delay=${4:-0} odelay=${5:-0}
     local id="fill${fill}_seed${seed}_v${vel}"
+    [ "$delay" != "0" ] && id="${id}_d${delay}"
+    [ "$odelay" != "0" ] && id="${id}_o${odelay}"
 
     if grep -qx "$id" "$SUMMARY" 2>/dev/null; then
         echo "--- $id 已完成，跳过"
@@ -141,7 +147,7 @@ run_one() {   # $1=fill $2=seed $3=max_vel
     local n=1
     while [ "$n" -le "$ATTEMPTS" ]; do
         echo ">>> $id (attempt $n/$ATTEMPTS)"
-        attempt_once "$fill" "$seed" "$vel" "$id"
+        attempt_once "$fill" "$seed" "$vel" "$id" "$delay" "$odelay"
         local rc=$?
         if [ "$rc" != "3" ]; then
             return $rc
@@ -158,14 +164,21 @@ run_one() {   # $1=fill $2=seed $3=max_vel
 # ---- A 组：障碍密度（max_vel 固定 2.0） ----
 for fill in $FILLS; do
     for seed in $SEEDS; do
-        run_one "$fill" "$seed" 2.0
+        run_one "$fill" "$seed" 2.0 0 0
     done
 done
 
 # ---- B 组：速度上限（fill 固定 0.12，2.0 已在 A 组） ----
 for vel in $VELS; do
     for seed in $BSEEDS; do
-        run_one "0.12" "$seed" "$vel"
+        run_one "0.12" "$seed" "$vel" 0 0
+    done
+done
+
+# ---- C 组：状态估计时延注入（fill=0.12, max_vel=2.0） ----
+for o in $ODELAYS; do
+    for seed in ${CSEEDS-"1 2 3 4 5 6"}; do
+        run_one "0.12" "$seed" 2.0 0 "$o"
     done
 done
 

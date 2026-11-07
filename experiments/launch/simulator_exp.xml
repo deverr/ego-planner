@@ -17,6 +17,7 @@
   <arg name="p_num" default="200"/>
   <arg name="min_dist" default="1.2"/>
   <arg name="odometry_topic"/>
+  <arg name="odom_ctrl_topic" default="/visual_slam/odom"/>
 
   <!-- There are two kinds of maps you can choose, just comment out the one you don’t need like the follow. Have a try. /-->
 
@@ -96,7 +97,7 @@
         <param name="so3_control/init_state_x" value="$(arg init_x)"/>
         <param name="so3_control/init_state_y" value="$(arg init_y)"/>
         <param name="so3_control/init_state_z" value="$(arg init_z)"/>
-        <remap from="~odom" to="/visual_slam/odom"/>
+        <remap from="~odom" to="$(arg odom_ctrl_topic)"/>
         <remap from="~position_cmd" to="/planning/pos_cmd"/>
         <remap from="~motors" to="motors"/>
         <remap from="~corrections" to="corrections"/>

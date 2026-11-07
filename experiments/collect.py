@@ -61,6 +61,26 @@ def count_replans(log_path):
         return len(re.findall(r"to REPLAN_TRAJ", fh.read()))
 
 
+def tracking_rmse(odom, cmd_path):
+    """指令位置与实际位置之差的 RMS，只统计起飞后（z > 0.3 m）。"""
+    if not os.path.exists(cmd_path):
+        return float("nan"), float("nan")
+    c = np.genfromtxt(cmd_path, delimiter=",", names=True)
+    if c.size < 10:
+        return float("nan"), float("nan")
+    if c.shape == ():
+        return float("nan"), float("nan")
+    ax = np.interp(c["t"], odom["t"], odom["x"])
+    ay = np.interp(c["t"], odom["t"], odom["y"])
+    az = np.interp(c["t"], odom["t"], odom["z"])
+    mask = az > 0.3
+    if mask.sum() < 10:
+        return float("nan"), float("nan")
+    err = np.sqrt((c["x"] - ax) ** 2 + (c["y"] - ay) ** 2 + (c["z"] - az) ** 2)
+    # 重规划会让指令瞬间跳变，瞬时 RMS 会被这些跳变支配，故用中位数 + p95
+    return float(np.median(err[mask])), float(np.percentile(err[mask], 95))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--id", required=True)
@@ -75,6 +95,8 @@ def main():
     ap.add_argument("--seed", type=int, required=True)
     ap.add_argument("--max-vel", type=float, required=True)
     ap.add_argument("--max-acc", type=float, required=True)
+    ap.add_argument("--cloud-delay", type=float, default=0.0)
+    ap.add_argument("--odom-delay", type=float, default=0.0)
     ap.add_argument("--summary", required=True)
     args = ap.parse_args()
 
@@ -86,9 +108,11 @@ def main():
 
     row = dict(id=args.id, fill=args.fill, seed=args.seed,
                max_vel=args.max_vel, max_acc=args.max_acc,
+               cloud_delay=args.cloud_delay, odom_delay=args.odom_delay,
                success=int(status == "success"),
                flight_time=float("nan"), path_len=float("nan"),
                max_speed=float("nan"), min_clearance=float("nan"),
+               track_med=float("nan"), track_p95=float("nan"),
                replans=count_replans(args.log))
 
     data = load_odom(args.odom) if os.path.exists(args.odom) else None
@@ -107,6 +131,8 @@ def main():
             except Exception:  # noqa: BLE001
                 cloud = None
         row["min_clearance"] = min_clearance(downsample(cloud), xyz)
+        row["track_med"], row["track_p95"] = tracking_rmse(
+            data, args.odom.replace(".csv", "_cmd.csv"))
 
         if status == "success":
             cum = np.concatenate([[0.0], np.cumsum(
@@ -117,7 +143,8 @@ def main():
                 row["flight_time"] = float(t[int(np.argmax(ok))])
 
     fields = ["id", "fill", "seed", "max_vel", "max_acc", "success",
-              "flight_time", "path_len", "max_speed", "min_clearance", "replans"]
+              "flight_time", "path_len", "max_speed", "min_clearance",
+              "track_med", "track_p95", "replans", "cloud_delay", "odom_delay"]
     new_file = not os.path.exists(args.summary)
     with open(args.summary, "a", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=fields)
@@ -125,10 +152,11 @@ def main():
             w.writeheader()
         w.writerow({k: row[k] for k in fields})
 
-    print("  %-22s success=%d  t=%6.1fs  clear=%.2fm  replans=%d"
+    print("  %-24s success=%d  t=%6.1fs  clear=%.2fm  track_med=%.3fm  replans=%d"
           % (args.id, row["success"],
              row["flight_time"] if row["flight_time"] == row["flight_time"] else -1,
              row["min_clearance"] if row["min_clearance"] == row["min_clearance"] else -1,
+             row["track_med"] if row["track_med"] == row["track_med"] else -1,
              row["replans"]))
 
 

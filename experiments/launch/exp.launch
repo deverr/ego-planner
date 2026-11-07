@@ -7,11 +7,15 @@
   <arg name="complexity" default="0.05"/>
   <arg name="max_vel"    default="2.0"/>
   <arg name="max_acc"    default="3.0"/>
+  <!-- 链路时延注入 (ms)：0 = 透传基线 -->
+  <arg name="cloud_delay_ms" default="0"/>   <!-- 感知（点云）时延 -->
+  <arg name="odom_delay_ms"  default="0"/>   <!-- 状态估计（里程计）时延 -->
 
   <arg name="map_size_x" value="40.0"/>
   <arg name="map_size_y" value="40.0"/>
   <arg name="map_size_z" value="3.0"/>
-  <arg name="odom_topic" value="/visual_slam/odom"/>
+  <!-- 消费方（规划器/控制器）统一读延迟后的里程计 -->
+  <arg name="odom_topic" value="/delayed/odom"/>
 
   <include file="$(find ego_planner)/launch/advanced_param.xml">
     <arg name="map_size_x_" value="$(arg map_size_x)"/>
@@ -21,7 +25,8 @@
 
     <arg name="camera_pose_topic" value="/pcl_render_node/camera_pose"/>
     <arg name="depth_topic" value="/pcl_render_node/depth"/>
-    <arg name="cloud_topic" value="/pcl_render_node/cloud"/>
+    <!-- 规划器读的是「延迟转发后」的点云 -->
+    <arg name="cloud_topic" value="/delayed/cloud"/>
 
     <arg name="cx" value="321.04638671875"/>
     <arg name="cy" value="243.44969177246094"/>
@@ -79,5 +84,15 @@
     <arg name="seed" value="$(arg seed)"/>
     <arg name="fill" value="$(arg fill)"/>
     <arg name="complexity" value="$(arg complexity)"/>
+    <arg name="odom_ctrl_topic" value="$(arg odom_topic)"/>
   </include>
+
+  <!-- 时延注入 -->
+  <node pkg="ego_planner_experiments" name="cloud_delay" type="delay_node.py"
+        output="screen"
+        args="--type cloud --in /pcl_render_node/cloud --out /delayed/cloud --delay-ms $(arg cloud_delay_ms)"/>
+
+  <node pkg="ego_planner_experiments" name="odom_delay" type="delay_node.py"
+        output="screen"
+        args="--type odom --in /visual_slam/odom --out /delayed/odom --delay-ms $(arg odom_delay_ms)"/>
 </launch>

@@ -24,6 +24,7 @@ def agg(rows):
     times = [fnum(r["flight_time"]) for r in rows if fnum(r["flight_time"]) == fnum(r["flight_time"])]
     clears = [fnum(r["min_clearance"]) for r in rows if fnum(r["min_clearance"]) == fnum(r["min_clearance"])]
     reps = [fnum(r["replans"]) for r in rows if fnum(r["replans"]) == fnum(r["replans"])]
+    tracks = [fnum(r.get("track_med")) for r in rows if fnum(r.get("track_med")) == fnum(r.get("track_med"))]
     res = {
         "n": n,
         "success": succ,
@@ -32,6 +33,7 @@ def agg(rows):
         "clear": (min(clears) if clears else float("nan"),
                   st.mean(clears) if clears else float("nan")),
         "replans": st.mean(reps) if reps else float("nan"),
+        "track": (st.mean(tracks) if tracks else float("nan")),
     }
     return res
 
@@ -41,15 +43,16 @@ def table(rows, key, label):
     for r in rows:
         groups.setdefault(fnum(r[key]), []).append(r)
     out = ["", "### %s" % label, "",
-           "| %s | trials | success | flight time (s) | min clearance (m) | replans |" % key,
-           "|---|---|---|---|---|---|"]
+           "| %s | trials | success | flight time (s) | min clearance (m) | median track err (m) | replans |" % key,
+           "|---|---|---|---|---|---|---|"]
     for k in sorted(groups):
         a = agg(groups[k])
         t, sd = a["time"]
         ts = "%.1f ± %.1f" % (t, sd) if t == t else "—"
         cs = "%.2f / %.2f" % (a["clear"][0], a["clear"][1]) if a["clear"][0] == a["clear"][0] else "—"
-        out.append("| %.2f | %d | %d/%d (%.0f%%) | %s | %s | %.1f |"
-                   % (k, a["n"], a["success"], a["n"], a["rate"], ts, cs, a["replans"]))
+        tr = "%.3f" % a["track"] if a["track"] == a["track"] else "—"
+        out.append("| %.2f | %d | %d/%d (%.0f%%) | %s | %s | %s | %.1f |"
+                   % (k, a["n"], a["success"], a["n"], a["rate"], ts, cs, tr, a["replans"]))
     return "\n".join(out)
 
 
@@ -60,6 +63,10 @@ def main():
     args = ap.parse_args()
 
     rows = load(args.summary)
+    for r in rows:                      # 旧行没有这两列，补成 0
+        for k in ("cloud_delay", "odom_delay"):
+            if not r.get(k):
+                r[k] = "0"
     if not rows:
         print("no rows")
         return
@@ -71,6 +78,18 @@ def main():
     md = [table(base, "fill", "障碍密度扫描（fill，max_vel 固定 2.0）")]
     if len({fnum(r["max_vel"]) for r in speed}) > 1:
         md.append(table(speed, "max_vel", "速度上限扫描（max_vel，fill 固定 0.12）"))
+
+    delay = [r for r in rows if fnum(r.get("cloud_delay") or 0) > 0]
+    if delay:
+        md.append(table(delay, "cloud_delay", "感知时延注入（cloud_delay，ms）"))
+
+    odelay = [r for r in rows
+              if fnum(r.get("odom_delay") or 0) > 0
+              or (fnum(r.get("fill")) == 0.12 and fnum(r.get("max_vel")) == 2.0
+                  and fnum(r.get("cloud_delay") or 0) == 0)]
+    nas = {fnum(r.get("odom_delay") or 0) for r in odelay}
+    if len(nas) > 1:
+        md.append(table(odelay, "odom_delay", "状态估计时延注入（odom_delay，ms；基线含历史 2 m/s 试验）"))
     text = "\n".join(md)
     print(text)
 
