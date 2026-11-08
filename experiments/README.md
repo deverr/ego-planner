@@ -168,27 +168,42 @@ Only state-estimate latency enters the control loop.
 
 ### State-estimate latency
 
-| odom delay (ms) | n | success | median tracking error (m) | mean clearance (m) |
-|---|---|---|---|---|
-| 0 | 4 | 4/4 | 0.039 | 0.143 |
-| 10 | 3 | 3/3 | 0.054 | 0.158 |
-| 20 | 3 | 3/3 | 0.049 | 0.162 |
-| 50 | 3 | 3/3 | 0.090 | 0.160 |
+Cells are `successes/trials, mean median tracking error (m)`:
 
-- 10–20 ms is inside the noise at 2 m/s.
-- At 50 ms the tracking error roughly doubles (0.039 → 0.090 m), and the
-  within-arm spread is only ±0.003 m, so the knee sits between 20 and 50 ms at
-  this operating point.
-- The 4 m/s operating point of the aerobatic work should reach the same knee at a
-  smaller delay, which is exactly the hypothesis worth testing on real hardware.
+| max_vel | 0 ms | 10 ms | 20 ms | 50 ms |
+|---|---|---|---|---|
+| 2.0 | 10/12, 0.040 | 3/3, 0.054 | 3/3, 0.049 | 3/3, 0.090 |
+| 3.0 | 7/8, 0.111 | 4/4, 0.113 | 3/4, 0.134 | 4/4, 0.185 |
+| 4.0 | 10/12, 0.149 | 4/4, 0.165 | 4/4, 0.189 | 3/4, 0.263 |
+
+The structure is the point:
+
+- **Baseline error already scales with speed**: 0.040 → 0.111 → 0.149 m for
+  2 → 3 → 4 m/s with no injected latency at all. Faster flight is inherently
+  harder to track.
+- **The 50 ms penalty grows with speed**: +0.050, +0.074, +0.114 m. The same
+  absolute delay costs more than twice as much at 4 m/s as at 2 m/s.
+- **At 4 m/s the two effects compound past the reference budget.** The aerobatic
+  work reports position tracking error ≤ 0.15 m during maneuvers; here the
+  0 ms baseline sits at 0.149 m and 50 ms reaches 0.263 m, 75% above it.
+
+That is the quantitative version of the proposal's opening claim: latency is not
+a fixed penalty, it is a penalty that scales with how hard the vehicle is flying.
+A timing budget validated at hover does not transfer to aerobatic flight.
+
+- At 2 m/s, 10–20 ms is inside the noise; 50 ms roughly doubles the error
+  (0.040 → 0.090 m, within-arm spread ±0.003 m).
 - Counterintuitive: mean clearance *rises* with delay (0.143 → 0.160 m). A lagging
   controller tracks slightly behind the reference, and in this map that happens to
   help. Success rate is the wrong metric to notice this with.
 
 ### Caveats
 
-- n = 3 per latency arm. This is a pilot; treat the 50 ms point as a hypothesis,
-  not a result.
+- n = 3–4 per latency arm. The 50 ms points are consistent within an arm
+  (±0.003 m at 2 m/s) but the arm size is small; treat the shape as the result,
+  not the individual numbers.
+- `flight_time` is measured from lift-off (first sample with z > 0.3 m), not from
+  the first odometry message, so the pre-takeoff dwell is not included.
 - The sim flies at a fixed 2 m/s waypoint loop. The regime where latency should
   hurt most — high speed and high body rate — is not reachable without changing
   the trajectory and controller.

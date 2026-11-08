@@ -51,12 +51,16 @@ if [ "$QUICK" = "1" ]; then
     VELS=${VELS-""}
     BSEEDS=${BSEEDS-"1 2"}
     DELAYS=${DELAYS-""}
+    ODELAYS=${ODELAYS-""}
+    CROSS=${CROSS-""}
 else
     SEEDS=${SEEDS-"1 2 3 4 5 6 7 8 9 10 11 12"}
     FILLS=${FILLS-"0.12 0.20 0.28"}
     VELS=${VELS-"3.0 4.0"}
     BSEEDS=${BSEEDS-"1 2 3 4 5 6 7 8"}
     DELAYS=${DELAYS-"10 20 50 100"}
+    ODELAYS=${ODELAYS-"0 10 20 50"}
+    CROSS=${CROSS-""}
 fi
 
 SIM_BIN="/ws/devel/lib/so3_quadrotor_simulator/quadrotor_simulator_so3"
@@ -139,7 +143,7 @@ run_one() {   # $1=fill $2=seed $3=max_vel $4=cloud_delay $5=odom_delay
     [ "$delay" != "0" ] && id="${id}_d${delay}"
     [ "$odelay" != "0" ] && id="${id}_o${odelay}"
 
-    if grep -qx "$id" "$SUMMARY" 2>/dev/null; then
+    if grep -q "^${id}," "$SUMMARY" 2>/dev/null; then
         echo "--- $id 已完成，跳过"
         return 0
     fi
@@ -179,6 +183,15 @@ done
 for o in $ODELAYS; do
     for seed in ${CSEEDS-"1 2 3 4 5 6"}; do
         run_one "0.12" "$seed" 2.0 0 "$o"
+    done
+done
+
+# ---- D 组：速度 × 时延交叉扫描 ----
+for pair in $CROSS; do
+    v=${pair%%:*}
+    d=${pair##*:}
+    for seed in ${XSEEDS-"1 2 3"}; do
+        run_one "0.12" "$seed" "$v" 0 "$d"
     done
 done
 

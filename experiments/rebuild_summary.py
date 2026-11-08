@@ -11,7 +11,7 @@ RAW = REPO / "results" / "raw"
 
 PATTERN = re.compile(
     r"^fill(?P<fill>[\d.]+)_seed(?P<seed>\d+)_v(?P<vel>[\d.]+)"
-    r"(?:_d(?P<delay>[\d.]+))?$")
+    r"(?:_d(?P<delay>[\d.]+))?(?:_o(?P<odelay>[\d.]+))?$")
 
 
 def main():
@@ -22,6 +22,9 @@ def main():
     ok = 0
     for status in sorted(RAW.glob("*.status")):
         tag = status.stem
+        if status.read_text().split()[0] not in ("success", "timeout"):
+            print("skip (unhealthy):", tag, file=sys.stderr)
+            continue
         m = PATTERN.match(tag)
         if not m:
             print("skip (unparsable):", tag, file=sys.stderr)
@@ -40,6 +43,7 @@ def main():
             "--fill", m.group("fill"), "--seed", m.group("seed"),
             "--max-vel", m.group("vel"), "--max-acc", "3.0",
             "--cloud-delay", m.group("delay") or "0",
+            "--odom-delay", m.group("odelay") or "0",
             "--summary", str(summary),
         ]
         if subprocess.call(cmd) == 0:

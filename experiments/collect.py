@@ -118,7 +118,10 @@ def main():
     data = load_odom(args.odom) if os.path.exists(args.odom) else None
     if data is not None and data.size > 1:
         xyz = np.column_stack([data["x"], data["y"], data["z"]])
-        t = data["t"] - data["t"][0]
+        # 从「起飞」计时，而不是从第一条里程计消息：monitor 在话题就绪时就开始记录，
+        # 之后无人机还要在地面等待若干秒，那段不该计入飞行时间。
+        lift = np.argmax(xyz[:, 2] > 0.3) if (xyz[:, 2] > 0.3).any() else 0
+        t = data["t"] - data["t"][lift]
         speed = np.sqrt(data["vx"] ** 2 + data["vy"] ** 2 + data["vz"] ** 2)
 
         row["path_len"] = float(np.linalg.norm(np.diff(xyz, axis=0), axis=1).sum())
