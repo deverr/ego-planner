@@ -21,3 +21,5 @@ __pycache__/
 
 # local run log
 /run_full.log
+/run_*.log
+/rebuild.log

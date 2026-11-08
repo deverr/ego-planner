@@ -172,20 +172,23 @@ Cells are `successes/trials, mean median tracking error (m)`:
 
 | max_vel | 0 ms | 10 ms | 20 ms | 50 ms |
 |---|---|---|---|---|
-| 2.0 | 10/12, 0.040 | 3/3, 0.054 | 3/3, 0.049 | 3/3, 0.090 |
-| 3.0 | 7/8, 0.111 | 4/4, 0.113 | 3/4, 0.134 | 4/4, 0.185 |
-| 4.0 | 10/12, 0.149 | 4/4, 0.165 | 4/4, 0.189 | 3/4, 0.263 |
+| 2.0 | 15/18, 0.041 | 9/9, 0.052 | 9/9, 0.063 | 9/9, 0.102 |
+| 3.0 | 11/14, 0.106 | 9/10, 0.111 | 9/10, 0.136 | 8/10, 0.185 |
+| 4.0 | 15/18, 0.152 | 10/10, 0.163 | 8/10, 0.167 | 9/10, 0.260 |
 
 The structure is the point:
 
-- **Baseline error already scales with speed**: 0.040 → 0.111 → 0.149 m for
+- **Baseline error already scales with speed**: 0.041 → 0.106 → 0.152 m for
   2 → 3 → 4 m/s with no injected latency at all. Faster flight is inherently
-  harder to track.
-- **The 50 ms penalty grows with speed**: +0.050, +0.074, +0.114 m. The same
-  absolute delay costs more than twice as much at 4 m/s as at 2 m/s.
+  harder to track, before any timing error is added.
+- **The 50 ms penalty grows with speed**: +0.061, +0.079, +0.108 m. The same
+  absolute delay costs 1.8× as much at 4 m/s as at 2 m/s.
 - **At 4 m/s the two effects compound past the reference budget.** The aerobatic
   work reports position tracking error ≤ 0.15 m during maneuvers; here the
-  0 ms baseline sits at 0.149 m and 50 ms reaches 0.263 m, 75% above it.
+  0 ms baseline already sits at 0.152 m and 50 ms reaches 0.260 m, 73% above it.
+- **Success rate starts to move only where both are high**: 3.0 m/s / 50 ms
+  drops to 8/10 and 4.0 m/s / 20 ms to 8/10, while every 2 m/s arm stays at
+  9/9. Latency alone is survivable; latency on top of speed is not.
 
 That is the quantitative version of the proposal's opening claim: latency is not
 a fixed penalty, it is a penalty that scales with how hard the vehicle is flying.
@@ -199,9 +202,9 @@ A timing budget validated at hover does not transfer to aerobatic flight.
 
 ### Caveats
 
-- n = 3–4 per latency arm. The 50 ms points are consistent within an arm
-  (±0.003 m at 2 m/s) but the arm size is small; treat the shape as the result,
-  not the individual numbers.
+- 8–10 arms carry tracking data per cell; the 0 ms cells additionally hold
+  earlier trials that predate command logging (counted for success, not for
+  tracking error).
 - `flight_time` is measured from lift-off (first sample with z > 0.3 m), not from
   the first odometry message, so the pre-takeoff dwell is not included.
 - The sim flies at a fixed 2 m/s waypoint loop. The regime where latency should
