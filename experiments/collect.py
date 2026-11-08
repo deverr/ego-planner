@@ -97,6 +97,7 @@ def main():
     ap.add_argument("--max-acc", type=float, required=True)
     ap.add_argument("--cloud-delay", type=float, default=0.0)
     ap.add_argument("--odom-delay", type=float, default=0.0)
+    ap.add_argument("--odom-jitter", type=float, default=0.0)
     ap.add_argument("--summary", required=True)
     args = ap.parse_args()
 
@@ -109,6 +110,7 @@ def main():
     row = dict(id=args.id, fill=args.fill, seed=args.seed,
                max_vel=args.max_vel, max_acc=args.max_acc,
                cloud_delay=args.cloud_delay, odom_delay=args.odom_delay,
+               odom_jitter=args.odom_jitter, omega_p95=float("nan"),
                success=int(status == "success"),
                flight_time=float("nan"), path_len=float("nan"),
                max_speed=float("nan"), min_clearance=float("nan"),
@@ -126,6 +128,12 @@ def main():
 
         row["path_len"] = float(np.linalg.norm(np.diff(xyz, axis=0), axis=1).sum())
         row["max_speed"] = float(speed.max())
+
+        # 体角速度：与姿态误差直接相关，也是「10 ms x omega」的量纲来源
+        names = data.dtype.names or ()
+        if all(k in names for k in ("wx", "wy", "wz")):
+            omega = np.sqrt(data["wx"] ** 2 + data["wy"] ** 2 + data["wz"] ** 2)
+            row["omega_p95"] = float(np.percentile(omega, 95))
 
         cloud = None
         if os.path.exists(args.cloud):
@@ -147,7 +155,8 @@ def main():
 
     fields = ["id", "fill", "seed", "max_vel", "max_acc", "success",
               "flight_time", "path_len", "max_speed", "min_clearance",
-              "track_med", "track_p95", "replans", "cloud_delay", "odom_delay"]
+              "track_med", "track_p95", "omega_p95", "replans",
+              "cloud_delay", "odom_delay", "odom_jitter"]
     new_file = not os.path.exists(args.summary)
     with open(args.summary, "a", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=fields)

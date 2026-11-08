@@ -10,6 +10,7 @@
   <!-- 链路时延注入 (ms)：0 = 透传基线 -->
   <arg name="cloud_delay_ms" default="0"/>   <!-- 感知（点云）时延 -->
   <arg name="odom_delay_ms"  default="0"/>   <!-- 状态估计（里程计）时延 -->
+  <arg name="odom_jitter_ms" default="0"/>   <!-- 时延抖动幅度 -->
 
   <arg name="map_size_x" value="40.0"/>
   <arg name="map_size_y" value="40.0"/>
@@ -94,5 +95,5 @@
 
   <node pkg="ego_planner_experiments" name="odom_delay" type="delay_node.py"
         output="screen"
-        args="--type odom --in /visual_slam/odom --out /delayed/odom --delay-ms $(arg odom_delay_ms)"/>
+        args="--type odom --in /visual_slam/odom --out /delayed/odom --delay-ms $(arg odom_delay_ms) --jitter-ms $(arg odom_jitter_ms)"/>
 </launch>

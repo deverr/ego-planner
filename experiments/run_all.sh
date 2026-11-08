@@ -53,6 +53,8 @@ if [ "$QUICK" = "1" ]; then
     DELAYS=${DELAYS-""}
     ODELAYS=${ODELAYS-""}
     CROSS=${CROSS-""}
+    JITTER=${JITTER-""}
+    ACC=${ACC-""}
 else
     SEEDS=${SEEDS-"1 2 3 4 5 6 7 8 9 10 11 12"}
     FILLS=${FILLS-"0.12 0.20 0.28"}
@@ -89,8 +91,8 @@ sim_count() {
 }
 
 # 起一次仿真并跑到结束。成功返回 0/2，起不来返回 3
-attempt_once() {   # $1=fill $2=seed $3=max_vel $4=tag $5=cloud_delay $6=odom_delay
-    local fill=$1 seed=$2 vel=$3 tag=$4 delay=$5 odelay=${6:-0}
+attempt_once() {   # $1=fill $2=seed $3=vel $4=tag $5=cloud_d $6=odom_d $7=jitter $8=acc
+    local fill=$1 seed=$2 vel=$3 tag=$4 delay=$5 odelay=${6:-0} jitter=${7:-0} acc=${8:-3.0}
     local csv="$RAW/${tag}.csv" cloud="$RAW/${tag}.npy" status="$RAW/${tag}.status"
     local log="$LOGS/${tag}.log"
 
@@ -98,6 +100,7 @@ attempt_once() {   # $1=fill $2=seed $3=max_vel $4=tag $5=cloud_delay $6=odom_de
     roslaunch ego_planner_experiments exp.launch \
         seed:="$seed" fill:="$fill" max_vel:="$vel" \
         cloud_delay_ms:="$delay" odom_delay_ms:="$odelay" \
+        odom_jitter_ms:="$jitter" max_acc:="$acc" \
         > "$log" 2>&1 9>&- &
     local lpid=$!
 
@@ -130,18 +133,21 @@ attempt_once() {   # $1=fill $2=seed $3=max_vel $4=tag $5=cloud_delay $6=odom_de
     python3 "$HERE/collect.py" \
         --id "$tag" --odom "$csv" --cloud "$cloud" --log "$log" \
         --status "$status" --goal="$GOAL" --min-path "$MIN_PATH" --tol "$TOL" \
-        --fill "$fill" --seed "$seed" --max-vel "$vel" --max-acc 3.0 \
+        --fill "$fill" --seed "$seed" --max-vel "$vel" --max-acc "$acc" \
         --cloud-delay "$delay" --odom-delay "${odelay:-0}" \
+        --odom-jitter "${jitter:-0}" \
         --summary "$SUMMARY" || true
 
     return $rc
 }
 
-run_one() {   # $1=fill $2=seed $3=max_vel $4=cloud_delay $5=odom_delay
-    local fill=$1 seed=$2 vel=$3 delay=${4:-0} odelay=${5:-0}
+run_one() {   # $1=fill $2=seed $3=vel $4=cloud_d $5=odom_d $6=jitter $7=acc
+    local fill=$1 seed=$2 vel=$3 delay=${4:-0} odelay=${5:-0} jitter=${6:-0} acc=${7:-3.0}
     local id="fill${fill}_seed${seed}_v${vel}"
     [ "$delay" != "0" ] && id="${id}_d${delay}"
     [ "$odelay" != "0" ] && id="${id}_o${odelay}"
+    [ "$jitter" != "0" ] && id="${id}_j${jitter}"
+    [ "$acc" != "3.0" ] && id="${id}_a${acc}"
 
     if grep -q "^${id}," "$SUMMARY" 2>/dev/null; then
         echo "--- $id 已完成，跳过"
@@ -151,7 +157,7 @@ run_one() {   # $1=fill $2=seed $3=max_vel $4=cloud_delay $5=odom_delay
     local n=1
     while [ "$n" -le "$ATTEMPTS" ]; do
         echo ">>> $id (attempt $n/$ATTEMPTS)"
-        attempt_once "$fill" "$seed" "$vel" "$id" "$delay" "$odelay"
+        attempt_once "$fill" "$seed" "$vel" "$id" "$delay" "$odelay" "$jitter" "$acc"
         local rc=$?
         if [ "$rc" != "3" ]; then
             return $rc
@@ -168,21 +174,21 @@ run_one() {   # $1=fill $2=seed $3=max_vel $4=cloud_delay $5=odom_delay
 # ---- A 组：障碍密度（max_vel 固定 2.0） ----
 for fill in $FILLS; do
     for seed in $SEEDS; do
-        run_one "$fill" "$seed" 2.0 0 0
+        run_one "$fill" "$seed" 2.0 0 0 0 3.0
     done
 done
 
 # ---- B 组：速度上限（fill 固定 0.12，2.0 已在 A 组） ----
 for vel in $VELS; do
     for seed in $BSEEDS; do
-        run_one "0.12" "$seed" "$vel" 0 0
+        run_one "0.12" "$seed" "$vel" 0 0 0 3.0
     done
 done
 
 # ---- C 组：状态估计时延注入（fill=0.12, max_vel=2.0） ----
 for o in $ODELAYS; do
     for seed in ${CSEEDS-"1 2 3 4 5 6"}; do
-        run_one "0.12" "$seed" 2.0 0 "$o"
+        run_one "0.12" "$seed" 2.0 0 "$o" 0 3.0
     done
 done
 
@@ -191,7 +197,29 @@ for pair in $CROSS; do
     v=${pair%%:*}
     d=${pair##*:}
     for seed in ${XSEEDS-"1 2 3"}; do
-        run_one "0.12" "$seed" "$v" 0 "$d"
+        run_one "0.12" "$seed" "$v" 0 "$d" 0 3.0
+    done
+done
+
+# ---- E 组：时延抖动（vel:delay:jitter） ----
+for spec in $JITTER; do
+    case "$spec" in *:*:*) ;; *) echo "坏的 JITTER 规格: $spec（需 vel:delay:jitter）" >&2; exit 1;; esac
+    v=${spec%%:*}; rest=${spec#*:}
+    d=${rest%%:*};  j=${rest##*:}
+    [ "$j" = "0" ] && { echo "JITTER 组的 jitter 不能为 0（会与固定时延组撞 id）: $spec" >&2; exit 1; }
+    for seed in ${JSEEDS-"1 2 3 4 5 6"}; do
+        run_one "0.12" "$seed" "$v" 0 "$d" "$j" 3.0
+    done
+done
+
+# ---- F 组：加速度上限（vel:acc:delay）→ 提高体角速度 ----
+for spec in $ACC; do
+    case "$spec" in *:*:*) ;; *) echo "坏的 ACC 规格: $spec（需 vel:acc:delay）" >&2; exit 1;; esac
+    v=${spec%%:*}; rest=${spec#*:}
+    a=${rest%%:*};  d=${rest##*:}
+    [ "$a" = "3.0" ] && { echo "ACC 组的 acc 不能为 3.0（会与固定时延组撞 id）: $spec" >&2; exit 1; }
+    for seed in ${ASEEDS-"1 2 3 4 5 6"}; do
+        run_one "0.12" "$seed" "$v" 0 "$d" 0 "$a"
     done
 done
 

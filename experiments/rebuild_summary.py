@@ -11,7 +11,8 @@ RAW = REPO / "results" / "raw"
 
 PATTERN = re.compile(
     r"^fill(?P<fill>[\d.]+)_seed(?P<seed>\d+)_v(?P<vel>[\d.]+)"
-    r"(?:_d(?P<delay>[\d.]+))?(?:_o(?P<odelay>[\d.]+))?$")
+    r"(?:_d(?P<delay>[\d.]+))?(?:_o(?P<odelay>[\d.]+))?"
+    r"(?:_j(?P<jitter>[\d.]+))?(?:_a(?P<acc>[\d.]+))?$")
 
 
 def main():
@@ -41,9 +42,11 @@ def main():
             "--log", str(log), "--status", str(status),
             "--goal=-15,0,1", "--min-path", "40", "--tol", "0.5",
             "--fill", m.group("fill"), "--seed", m.group("seed"),
-            "--max-vel", m.group("vel"), "--max-acc", "3.0",
+            "--max-vel", m.group("vel"),
             "--cloud-delay", m.group("delay") or "0",
             "--odom-delay", m.group("odelay") or "0",
+            "--odom-jitter", m.group("jitter") or "0",
+            "--max-acc", m.group("acc") or "3.0",
             "--summary", str(summary),
         ]
         if subprocess.call(cmd) == 0:

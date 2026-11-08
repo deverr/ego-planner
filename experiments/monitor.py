@@ -40,7 +40,7 @@ class Monitor(object):
         self.z_max = 0.0
 
         self.fh = open(args.out, "w", buffering=1)
-        self.fh.write("t,x,y,z,vx,vy,vz\n")
+        self.fh.write("t,x,y,z,vx,vy,vz,wx,wy,wz\n")
 
         # 指令流单独落盘，用来算跟踪误差
         self.fc = open(args.out.replace(".csv", "_cmd.csv"), "w", buffering=1)
@@ -76,9 +76,10 @@ class Monitor(object):
     def cb_odom(self, msg):
         p = msg.pose.pose.position
         v = msg.twist.twist.linear
+        w = msg.twist.twist.angular
         t = msg.header.stamp.to_sec()
-        self.fh.write("%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\n"
-                      % (t, p.x, p.y, p.z, v.x, v.y, v.z))
+        self.fh.write("%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\n"
+                      % (t, p.x, p.y, p.z, v.x, v.y, v.z, w.x, w.y, w.z))
         self.n += 1
 
         # 起飞检查：仿真没起来时无人机会停在原点，靠这个把无效试验挡掉

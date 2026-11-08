@@ -213,3 +213,44 @@ A timing budget validated at hover does not transfer to aerobatic flight.
 - `track_med` is the median of |commanded position − actual position| over the
   flight. The instantaneous RMS is dominated by the reference jumps that occur at
   replanning, so it is not used.
+
+## Jitter vs fixed latency
+
+A real link does not delay by a constant, it delays by a distribution. Is the
+mean enough?
+
+| speed | fixed 0 ms | jitter, mean ≈ 5 ms | fixed 20 ms | jitter, mean 20 ms |
+|---|---|---|---|---|
+| 2.0 m/s | 15/18, 0.041 | 5/5, 0.053 | 9/9, 0.063 | 5/5, 0.075 |
+| 4.0 m/s | 15/18, 0.152 | 5/5, 0.152 | 8/10, 0.167 | 4/5, 0.185 |
+
+At equal mean (20 ms) jitter is worse than fixed delay at both speeds, +19% at
+2 m/s and +11% at 4 m/s. The direction is consistent but n = 5 per arm, so treat
+the magnitude as indicative.
+
+Two implementation details that matter:
+
+- `base 0 ± 20 ms` cannot be symmetric on a non-negative delay: negative samples
+  clamp to zero, so the *effective* mean is ≈ 5 ms, not 0. The node now warns
+  about this at startup rather than silently shifting the mean.
+- Release times are forced non-decreasing. Downstream metrics interpolate
+  odometry by timestamp, so letting a later message overtake an earlier one
+  would corrupt `track_med` rather than model anything real.
+
+## Angular rate
+
+Odometry angular velocity is logged; `omega_p95` is the 95th percentile of
+|omega| over the flight.
+
+- At 4 m/s the vehicle already reaches **≈ 8.4 rad/s** p95, and ≈ 1.7 rad/s at
+  2 m/s. This is well above the 4 rad/s planning constraint used in the
+  aerobatic work — that constraint bounds the *commanded* trajectory, not the
+  body rates the controller produces while tracking and replanning.
+- Raising `max_acc` does **not** buy a clean angular-rate axis. Going 3.0 → 6.0
+  → 9.0 moved `omega_p95` only 8.36 → 8.13 → 9.04 rad/s, and it *reduced*
+  tracking error at zero latency (0.152 → 0.133), because a higher limit means
+  less saturation, not a harder task.
+
+Recorded as a negative result: a proper angular-rate axis needs yaw-heavy
+manoeuvres, which the stock waypoint loop does not produce. That is a change to
+the trajectory and controller, not to the harness.

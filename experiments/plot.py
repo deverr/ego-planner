@@ -71,9 +71,12 @@ def main():
         print("no rows")
         return
 
-    # 密度对比只能取同一速度下的样本，否则速度组的行会混进来
-    base = [r for r in rows if fnum(r["max_vel"]) == 2.0]
-    speed = [r for r in rows if fnum(r["fill"]) == 0.12]
+    # 密度/速度/时延三张表都只能取「无抖动、默认加速度」的样本
+    clean = [r for r in rows
+             if fnum(r.get("odom_jitter") or 0) == 0
+             and fnum(r.get("max_acc")) == 3.0]
+    base = [r for r in clean if fnum(r["max_vel"]) == 2.0]
+    speed = [r for r in clean if fnum(r["fill"]) == 0.12]
 
     md = [table(base, "fill", "障碍密度扫描（fill，max_vel 固定 2.0）")]
     if len({fnum(r["max_vel"]) for r in speed}) > 1:
@@ -83,7 +86,7 @@ def main():
     if delay:
         md.append(table(delay, "cloud_delay", "感知时延注入（cloud_delay，ms）"))
 
-    odelay = [r for r in rows
+    odelay = [r for r in clean
               if fnum(r.get("odom_delay") or 0) > 0
               or (fnum(r.get("fill")) == 0.12 and fnum(r.get("max_vel")) == 2.0
                   and fnum(r.get("cloud_delay") or 0) == 0)]
