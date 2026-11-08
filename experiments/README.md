@@ -242,12 +242,16 @@ Two implementation details that matter:
 Odometry angular velocity is logged; `omega_p95` is the 95th percentile of
 |omega| over the flight.
 
-- At 4 m/s the vehicle already reaches **≈ 8.4 rad/s** p95, and ≈ 1.7 rad/s at
-  2 m/s. This is well above the 4 rad/s planning constraint used in the
-  aerobatic work — that constraint bounds the *commanded* trajectory, not the
+- At 4 m/s with the default acceleration limit the vehicle reaches **6.2 rad/s**
+  p95 (range 4.1–7.6, n = 10); at 2 m/s it is **1.7 rad/s** (range 1.3–2.1,
+  n = 10). That is already above the 4 rad/s planning constraint used in the
+  aerobatic work — the constraint bounds the *commanded* trajectory, not the
   body rates the controller produces while tracking and replanning.
+- Coverage caveat: angular velocity is only recorded for the 35 trials run after
+  the logging was added, so this section is backed by fewer samples than the
+  latency grid.
 - Raising `max_acc` does **not** buy a clean angular-rate axis. Going 3.0 → 6.0
-  → 9.0 moved `omega_p95` only 8.36 → 8.13 → 9.04 rad/s, and it *reduced*
+  → 9.0 moved `omega_p95` only 6.17 → 8.24 → 9.04 rad/s, and it *reduced*
   tracking error at zero latency (0.152 → 0.133), because a higher limit means
   less saturation, not a harder task.
 
